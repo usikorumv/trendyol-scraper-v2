@@ -1,2 +1,3 @@
 ujson
 aiohttp
+pretty_errors

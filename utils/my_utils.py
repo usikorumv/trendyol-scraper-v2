@@ -1,22 +1,27 @@
 class FolderAndFileUtils:
     @staticmethod
-    def create_file(path: str, data: str):
-        path_list = path.split("/")[:-1]
+    def path_exist(name : str):
+        from os import path
+
+        return path.exists(name)
+
+    @staticmethod
+    def create_file(path_and_name: str, data: str):
+        path_list = path_and_name.split("/")[:-1]
 
         paths = ""
-        for path_ in path_list:
-            paths += f"{path_}/"
+        for path in path_list:
+            paths += f"{path}/"
             FolderAndFileUtils.create_folder(paths)
 
-        with open(path, "w", encoding="utf-8") as f:
+        with open(path_and_name, "w", encoding="utf-8") as f:
             f.write(data)
 
     @staticmethod
     def create_folder(name):
-        from os import path
         from os import mkdir
 
-        if path.exists(name):
+        if FolderAndFileUtils.path_exist(name):
             return
         mkdir(name)
 

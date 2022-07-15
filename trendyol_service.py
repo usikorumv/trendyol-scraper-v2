@@ -1,4 +1,7 @@
-import asyncio, aiohttp
+import pretty_errors
+import ujson
+import asyncio
+import aiohttp
 
 from trendyol_apis import TrendyolAPIs
 
@@ -54,7 +57,7 @@ class TrendyolService(TrendyolAPIs):
                         "comment": review["comment"],
                         "date": review["lastModifiedDate"],
                     }
-                    for review in reviews[:20]
+                    for review in reviews[:20]  # Review
                 ]
             except:
                 return []
@@ -133,7 +136,8 @@ class TrendyolService(TrendyolAPIs):
                 brand = product["brand"]
                 category = product["originalCategory"]
                 brand = product["brand"]
-                sizes = product["allVariants"]
+                sizes = product.get("allVariants", [])
+
                 description = product["contentDescriptions"]
 
                 final = {
@@ -159,8 +163,7 @@ class TrendyolService(TrendyolAPIs):
                     "showColor": product["color"],  # REVIEW
                     # TODO: Some product have problems while getting showSize
                     "showSize": product["variants"][0]["attributeValue"],  # REVIEW
-                    # TODO: Some products dont have sizes
-                    "sizes": [  # REVIEW
+                    "sizes": [
                         {
                             "value": size["value"],
                             "inStock": size["inStock"],
@@ -187,19 +190,6 @@ class TrendyolService(TrendyolAPIs):
 
             except Exception as e:
                 print(f"\nError: {id}\n")
-
-    def get_product_from_id(self, id):
-        async def task():
-            global product
-            async with aiohttp.ClientSession() as session:
-                product = await self.fetch_product_from_id(session, id)
-
-        asyncio.run(task())
-
-        # TODO: REFACTOR
-        MyUtils.create_folder("output")
-        MyUtils.create_folder("output/products")
-        MyUtils.create_file(f"output/products/{id}.json", ujson.dumps(product))
 
         return product
 
@@ -250,23 +240,8 @@ class TrendyolService(TrendyolAPIs):
         except asyncio.TimeoutError:
             print(f"\nFAILED TO PROCESS Link: {link}\nPage: {page + 1}")
 
-        # except aiohttp.ClientConnectionError:
-        #     # pass
-        #     print(f"\nFAILED Link: {link}\nPage: {page + 1}")
-
-        # except aiohttp.client_exceptions.ClientPayloadError:
-        #     pass
-
         except Exception as e:
             print(f"\nFAILED Link: {link}\nPage: {page + 1}")
-
-            # TODO: REFACTOR
-            # MyUtils.create_folder("output")
-            # MyUtils.create_folder("output/error")
-            # MyUtils.create_file("output/error/trace_back.txt", str(e))
-            # MyUtils.create_file(
-            #     "output/error/products.json", ujson.dumps(self.all_products)
-            # )
 
     # TODO: Add parameters like how much pages and categories (also check if they are valid)
     async def fetch_all_products(self):
@@ -294,15 +269,14 @@ class TrendyolService(TrendyolAPIs):
 
         connector = aiohttp.TCPConnector(limit=50)
         async with aiohttp.ClientSession(connector=connector) as session:
-            # async with aiohttp.ClientSession() as session:
-            self.total = len(end_categories) * 208
+        # async with aiohttp.ClientSession() as session:
 
             tasks = [
                 self.fetch_all_products_from_link(session, category["link"], page)
                 # for page in range(208 + 1)  # JUST FOR TEST
                 # for category in end_categories  # JUST FOR TEST
                 for page in range(1)  # JUST FOR TEST
-                for category in end_categories  # JUST FOR TEST
+                for category in end_categories[:1]  # JUST FOR TEST
             ]
 
             await asyncio.gather(*tasks)
@@ -329,7 +303,7 @@ class TrendyolService(TrendyolAPIs):
     # COLORS
     all_colors = []
 
-    async def get_colors_from_link(self, session, link):
+    async def fetch_colors_from_link(self, session, link):
         async with session.get(
             self.aggregations_api + link, headers=headers
         ) as response:
@@ -358,14 +332,14 @@ class TrendyolService(TrendyolAPIs):
 
         async with aiohttp.ClientSession() as session:
             for category in self.categories:
-                tasks.append(self.get_colors_from_link(session, category["link"]))
+                tasks.append(self.fetch_colors_from_link(session, category["link"]))
 
             await asyncio.gather(*tasks)
 
-    # GET SIZES
+    # SIZES
     all_sizes = []
 
-    async def get_sizes_from_link(self, session, link):
+    async def fetch_sizes_from_link(self, session, link):
         async with session.get(
             self.aggregations_api + link, headers=headers
         ) as response:
@@ -392,15 +366,15 @@ class TrendyolService(TrendyolAPIs):
         tasks = []
 
         async with aiohttp.ClientSession() as session:
-            for category in self.categories:
-                tasks.append(self.get_sizes_from_link(session, category["link"]))
+            for category in self.categories_api:
+                tasks.append(self.fetch_sizes_from_link(session, category["link"]))
 
             await asyncio.gather(*tasks)
 
     # BRANDS
     all_brands = []
 
-    async def get_brands_from_link(self, session, link):
+    async def fetch_brands_from_link(self, session, link):
         async with session.get(
             self.aggregations_api + link, headers=headers
         ) as response:
@@ -429,14 +403,14 @@ class TrendyolService(TrendyolAPIs):
 
         async with aiohttp.ClientSession() as session:
             for category in self.categories:
-                tasks.append(self.get_brands_from_link(session, category["link"]))
+                tasks.append(self.fetch_brands_from_link(session, category["link"]))
 
             await asyncio.gather(*tasks)
 
     # CATEGORIES
     all_categories = []
 
-    async def get_categories_from_link(self, session, link):
+    async def fetch_categories_from_link(self, session, link):
         async with session.get(
             self.aggregations_api + link, headers=headers
         ) as response:
@@ -456,13 +430,13 @@ class TrendyolService(TrendyolAPIs):
                 pass
 
     # TODO: Make full async
-    async def get_categories(self, category, write2file=False):
+    async def fetch_categories_from_root(self, category, write2file=False):
         all_categories = [category]
 
         async with aiohttp.ClientSession() as session:
             i = 0
             while i < len(all_categories):
-                categories = await self.get_categories_from_link(
+                categories = await self.fetch_categories_from_link(
                     session, all_categories[i]["link"]
                 )
 
@@ -495,6 +469,9 @@ class TrendyolService(TrendyolAPIs):
     async def fetch_all_categories(self):
         self.all_categories = []
 
-        tasks = [self.get_categories(category) for category in self.categories_api]
+        tasks = [
+            self.fetch_categories_from_root(category)
+            for category in self.categories_api
+        ]
 
         await asyncio.gather(*tasks)
